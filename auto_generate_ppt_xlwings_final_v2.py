@@ -278,6 +278,16 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
 
                 slide = prs.slides.add_slide(prs.slide_layouts[5])
                 slide.shapes.title.text = f"{key} – {metric}"
+                # Home button to return to summary
+                btn = slide.shapes.add_shape(
+                    MSO_SHAPE.ACTION_BUTTON_HOME,
+                    Inches(9.0),
+                    Inches(0.2),
+                    Inches(0.5),
+                    Inches(0.5),
+                )
+                btn.click_action.target_slide = summary_slide
+                btn.text_frame.text = ""
                 # Formula box
                 tx = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(9.2), Inches(1.2))
                 tf = tx.text_frame; tf.clear()
