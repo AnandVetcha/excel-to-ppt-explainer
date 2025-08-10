@@ -291,9 +291,10 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 # Formula box
                 tx = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(9.2), Inches(1.2))
                 tf = tx.text_frame; tf.clear()
+                tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
-                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1
-                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {info['value']}"; p3.level = 1
+                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14) 
+                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {info['value']}"; p3.level = 1;p3.font.size = Pt(14)  
                 # Snippet
                 rows, cols = df_snippet.shape
                 s_table = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), Inches(0.6 + 0.3*max(rows,1))).table
