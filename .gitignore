@@ -1,0 +1,10 @@
+# --- Build/outputs/artifacts ---
+*.pptx
+*.pdf
+*.log
+*.tmp
+
+# --- Excel data ---
+*.xlsx
+# keep sample workbooks
+!sample_*.xlsx
