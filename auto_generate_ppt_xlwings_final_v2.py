@@ -11,7 +11,7 @@ auto_generate_ppt_xlwings_final.py
 - Header font is set with --header_font_pt (default 12) and word_wrap=False.
 
 Usage:
-  python auto_generate_ppt_xlwings_final.py --xlsx sample_sales_mix.xlsx --sheet Sheet1 --summary_start A12 --raw_table Raw_Data --out deck.pptx --link_mode overlay --header_font_pt 12 --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --out deck.pptx  --link_mode overlay  --header_font_pt 12   --verbose
 """
 import argparse
 import re
