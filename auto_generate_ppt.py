@@ -23,6 +23,21 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
 # ---------------- Excel helpers ----------------
 def get_formula_str(cell):
+    """Return formula text for a cell if present.
+
+    openpyxl 3.1 introduced a dedicated ``Cell.formula`` attribute where
+    the computed value is stored separately from the expression.  Earlier
+    versions exposed the formula via ``Cell.value``.  This helper works for
+    both by first checking ``cell.formula`` and falling back to
+    ``cell.value``.
+    """
+    if hasattr(cell, "formula") and cell.formula:
+        # ``cell.formula`` may return an object in 3.1+, ensure we get a
+        # string starting with '='
+        text = getattr(cell.formula, "text", cell.formula)
+        if not isinstance(text, str):
+            text = str(text)
+        return text if text.startswith("=") else f"={text}"
     val = cell.value
     if isinstance(val, str) and val.startswith("="):
         return val
