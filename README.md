@@ -20,6 +20,7 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
 - Hyperlinks can be created as **overlay shapes** on top of each cell (default) or as **text-run** hyperlinks.
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
 - Numeric values are rounded to `--round_digits` decimal places (default 2).
+- Can optionally append all generated slides to an **existing** PowerPoint file; when the template uses a wider slide size, navigation buttons and tables align with the title placeholders.
 
 ---
 
@@ -51,6 +52,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
   --summary_start A12 ^
   --raw_table Raw_Data ^
   --key_header Product ^
+  --pptx_in Power_point_input.pptx ^
   --out deck.pptx ^
   --link_mode overlay ^
   --table_font_pt 12 ^
@@ -65,7 +67,8 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--summary_start` : the top-left **data** cell of the summary (first row below headers), e.g. `A12`.
 - `--raw_table` : name of the Excel **Table** (ListObject) with raw data.
 - `--key_header` : column used as the key in detail tables (e.g., `Product`). Defaults to the first column of the raw table.
-- `--out` : output PPTX path.
+- `--pptx_in` : optional existing PowerPoint file to append the generated slides to.
+- `--out` : output PPTX path. Defaults to the value of `--pptx_in` (if provided) or `deck.pptx`.
 - `--link_mode` : `text` (hyperlink on the number text; no shapes; **default**) or `overlay` (transparent rectangles on top of each numeric cell).
 - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`). When `--link_mode` is `text`, row heights scale with this value (0.4" at 18pt).
 - `--round_digits` : decimal places for numeric values (default 2).

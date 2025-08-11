@@ -221,7 +221,19 @@ def format_number(val, round_digits: int) -> str:
     return str(val)
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12, key_header: str=None, round_digits: int=2):
+def build_ppt_xlwings(
+    xlsx_path: Path,
+    out_path: Path,
+    sheet_name: str,
+    summary_start: str,
+    raw_table_name: str = None,
+    verbose: bool = False,
+    link_mode: str = "overlay",
+    table_font_pt: int = 12,
+    key_header: str = None,
+    round_digits: int = 2,
+    pptx_in_path: Path = None,
+):
     app = xw.App(visible=False, add_book=False)
     try:
         wb = xw.Book(xlsx_path)
@@ -261,15 +273,19 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                     print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula_found={bool(f)}")
             summary.append(items)
 
-        prs = Presentation()
+        prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
         # Title Only layout
         summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
         summary_slide.shapes.title.text = "Summary Table"
 
-        # table scaffold
+        # table scaffold aligned with title margins
         sum_cols = len(headers)
         sum_rows = len(summary) + 1
-        left, top, width = Inches(0.5), Inches(1.5), Inches(9.5)
+        title_shape = summary_slide.shapes.title
+        left = title_shape.left
+        right_margin = prs.slide_width - (title_shape.left + title_shape.width)
+        top = title_shape.top + title_shape.height + Inches(0.2)
+        width = prs.slide_width - left - right_margin
         if link_mode == "text":
             base_row_height = Inches(0.4 * table_font_pt / 18)
         else:
@@ -321,10 +337,15 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
 
                 slide = prs.slides.add_slide(prs.slide_layouts[5])
                 slide.shapes.title.text = f"{key} – {metric}"
+                title_shape = slide.shapes.title
+                right_margin = prs.slide_width - (title_shape.left + title_shape.width)
+                content_left = title_shape.left
+                content_width = prs.slide_width - content_left - right_margin
                 # Home button to return to summary
+                btn_left = prs.slide_width - right_margin - Inches(0.5)
                 btn = slide.shapes.add_shape(
                     MSO_SHAPE.ACTION_BUTTON_HOME,
-                    Inches(9.0),
+                    btn_left,
                     Inches(0.2),
                     Inches(0.5),
                     Inches(0.5),
@@ -332,11 +353,13 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 btn.click_action.target_slide = summary_slide
                 btn.text_frame.text = ""
                 # Formula box
-                tx = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(9.2), Inches(1.2))
+                formula_height = Inches(1.2)
+                formula_top = title_shape.top + title_shape.height + Inches(0.2)
+                tx = slide.shapes.add_textbox(content_left, formula_top, content_width, formula_height)
                 tf = tx.text_frame; tf.clear()
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
-                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14) 
+                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
                 p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
                 # Snippet
                 rows, cols = df_snippet.shape
@@ -346,7 +369,8 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 else:
                     snip_height = Inches(0.6 + 0.3*max(rows,1))
                     snip_row_height = None
-                s_table_shape = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), snip_height)
+                snip_top = formula_top + formula_height + Inches(0.2)
+                s_table_shape = slide.shapes.add_table(rows+1, cols, content_left, snip_top, content_width, snip_height)
                 s_table = s_table_shape.table
                 if snip_row_height is not None:
                     for rr in range(rows+1):
@@ -421,7 +445,8 @@ def main():
     ap.add_argument("--xlsx", required=True, help="Path to Excel file")
     ap.add_argument("--sheet", default="Sheet1", help="Worksheet name")
     ap.add_argument("--summary_start", required=True, help="Top-left data cell of summary (e.g., A12)")
-    ap.add_argument("--out", default="deck.pptx", help="Output PPTX")
+    ap.add_argument("--pptx_in", default=None, help="Existing PPTX to append slides to")
+    ap.add_argument("--out", default=None, help="Output PPTX (defaults to --pptx_in or 'deck.pptx')")
     ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
     ap.add_argument("--key_header", default=None, help="Column to display in detail tables (e.g., 'Product')")
     ap.add_argument("--link_mode", choices=["text","overlay"], default="text", help="How to create links on summary cells")
@@ -434,9 +459,11 @@ def main():
     if font_pt is None:
         font_pt = 12
 
+    out_path = Path(args.out) if args.out else Path(args.pptx_in) if args.pptx_in else Path("deck.pptx")
+
     out = build_ppt_xlwings(
         xlsx_path=Path(args.xlsx),
-        out_path=Path(args.out),
+        out_path=out_path,
         sheet_name=args.sheet,
         summary_start=args.summary_start,
         raw_table_name=args.raw_table,
@@ -445,6 +472,7 @@ def main():
         table_font_pt=font_pt,
         key_header=args.key_header,
         round_digits=args.round_digits,
+        pptx_in_path=Path(args.pptx_in) if args.pptx_in else None,
     )
     print(f"PPT created: {out}")
 
