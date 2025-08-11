@@ -27,6 +27,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.oxml.ns import qn
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
 # ---------------- Excel helpers ----------------
 def get_formula_str(cell):
@@ -184,6 +185,32 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
     rect.click_action.target_slide = target_slide
     return rect
 
+
+def link_run_to_slide(run, dest_slide, tooltip_text: str = ""):
+    """Attach an internal hyperlink to a run that jumps to ``dest_slide``.
+
+    Parameters
+    ----------
+    run : pptx.text.text._Run
+        Run to link.
+    dest_slide : pptx.slide.Slide
+        Slide to jump to when the run is clicked.
+    tooltip_text : str, optional
+        Tooltip to display on hover.
+    """
+    rId = run.part.relate_to(dest_slide.part, RT.SLIDE)
+    rPr = run._r.get_or_add_rPr()
+    # remove any existing run-level hyperlink
+    for child in list(rPr):
+        if child.tag.endswith("hlinkClick"):
+            rPr.remove(child)
+    h = OxmlElement("a:hlinkClick")
+    h.set(qn("r:id"), rId)
+    h.set("action", "ppaction://hlinksldjump")
+    if tooltip_text:
+        h.set("tooltip", tooltip_text)
+    rPr.append(h)
+
 # ---------------- Formatting helper ----------------
 def format_number(val, round_digits: int) -> str:
     if val is None:
@@ -339,7 +366,8 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 run.font.size = Pt(table_font_pt)
                 target = detail_slide_map.get((i, metric))
                 if target and text != "":
-                    run.hyperlink.target_slide = target  # backup link
+                    tooltip = target.shapes.title.text if target.shapes.title else ""
+                    link_run_to_slide(run, target, tooltip_text=tooltip)
 
         # recompute actual grid
         col_lefts = [int(left)]
