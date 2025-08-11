@@ -8,10 +8,11 @@ auto_generate_ppt_xlwings_final.py
     2) Also force the underlying DrawingML: <a:solidFill><a:srgbClr ...><a:alpha val="0"/></a:srgbClr></a:solidFill>
 - Overlays are aligned using ACTUAL table widths/heights after text is placed.
 - We still add run-level links to the numbers as a backup.
-- Header font is set with --header_font_pt (default 12) and word_wrap=False.
+- Table font size is set with --table_font_pt (default 12) and word_wrap=False.
+- (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --out deck.pptx  --link_mode overlay  --header_font_pt 12   --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --out deck.pptx  --link_mode overlay  --table_font_pt 12   --verbose
 """
 import argparse
 import re
@@ -183,7 +184,7 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
     return rect
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", header_font_pt: int=12):
+def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12):
     app = xw.App(visible=False, add_book=False)
     try:
         wb = xw.Book(xlsx_path)
@@ -251,7 +252,7 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
             run = tf.paragraphs[0].add_run()
             run.text = str(h)
             run.font.bold = True
-            run.font.size = Pt(header_font_pt)
+            run.font.size = Pt(table_font_pt)
 
         # build detail slides first
         detail_slide_map = {}
@@ -300,23 +301,30 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 s_table = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), Inches(0.6 + 0.3*max(rows,1))).table
                 for jj, hh in enumerate(df_snippet.columns):
                     tfh = s_table.cell(0, jj).text_frame; tfh.clear()
-                    r0 = tfh.paragraphs[0].add_run(); r0.text = str(hh); r0.font.bold = True
+                    r0 = tfh.paragraphs[0].add_run(); r0.text = str(hh); r0.font.bold = True; r0.font.size = Pt(table_font_pt)
                 for ii in range(rows):
                     for jj in range(cols):
                         val = df_snippet.iloc[ii, jj]
-                        s_table.cell(ii+1, jj).text = "" if val is None else str(val)
+                        cell = s_table.cell(ii+1, jj)
+                        tfcell = cell.text_frame; tfcell.clear()
+                        run = tfcell.paragraphs[0].add_run()
+                        run.text = "" if val is None else str(val)
+                        run.font.size = Pt(table_font_pt)
                 detail_slide_map[(i, metric)] = slide
 
         # write summary values
         for i, row in enumerate(summary, start=1):
             tf0 = table.cell(i, 0).text_frame; tf0.clear()
-            tf0.paragraphs[0].add_run().text = "" if row['key'] is None else str(row['key'])
+            run0 = tf0.paragraphs[0].add_run()
+            run0.text = "" if row['key'] is None else str(row['key'])
+            run0.font.size = Pt(table_font_pt)
             for j, metric in enumerate(headers[1:], start=1):
                 tf = table.cell(i, j).text_frame; tf.clear()
                 run = tf.paragraphs[0].add_run()
                 val = row["cells"][metric]["value"]
                 text = "" if val is None else (f"{val:.6g}" if isinstance(val, (int,float)) and not isinstance(val, bool) else str(val))
                 run.text = text
+                run.font.size = Pt(table_font_pt)
                 target = detail_slide_map.get((i, metric))
                 if target and text != "":
                     run.hyperlink.target_slide = target  # backup link
@@ -363,9 +371,13 @@ def main():
     ap.add_argument("--out", default="deck.pptx", help="Output PPTX")
     ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
     ap.add_argument("--link_mode", choices=["text","overlay"], default="overlay", help="How to create links on summary cells")
-    ap.add_argument("--header_font_pt", type=int, default=12, help="Header font size to avoid wrapping")
+    ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
+    ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--verbose", action="store_true", help="Debug prints")
     args = ap.parse_args()
+    font_pt = args.table_font_pt if args.table_font_pt is not None else args.header_font_pt
+    if font_pt is None:
+        font_pt = 12
 
     out = build_ppt_xlwings(
         xlsx_path=Path(args.xlsx),
@@ -375,7 +387,7 @@ def main():
         raw_table_name=args.raw_table,
         verbose=args.verbose,
         link_mode=args.link_mode,
-        header_font_pt=args.header_font_pt,
+        table_font_pt=font_pt,
     )
     print(f"PPT created: {out}")
 

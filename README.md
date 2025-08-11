@@ -51,7 +51,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
   --raw_table Raw_Data ^
   --out deck.pptx ^
   --link_mode overlay ^
-  --header_font_pt 12 ^
+  --table_font_pt 12 ^
   --verbose
 ```
 
@@ -63,7 +63,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--raw_table` : name of the Excel **Table** (ListObject) with raw data.
 - `--out` : output PPTX path.
 - `--link_mode` : `overlay` (transparent rectangles on top of each numeric cell; **default**) or `text` (hyperlink on the number text; no shapes).
-- `--header_font_pt` : header font size; smaller values help keep headers on one line.
+  - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`).
 - `--verbose` : print debug info (useful while wiring up a new workbook).
 
 ---
