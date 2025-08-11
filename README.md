@@ -66,7 +66,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--raw_table` : name of the Excel **Table** (ListObject) with raw data.
 - `--key_header` : column used as the key in detail tables (e.g., `Product`). Defaults to the first column of the raw table.
 - `--out` : output PPTX path.
-- `--link_mode` : `overlay` (transparent rectangles on top of each numeric cell; **default**) or `text` (hyperlink on the number text; no shapes).
+- `--link_mode` : `text` (hyperlink on the number text; no shapes; **default**) or `overlay` (transparent rectangles on top of each numeric cell).
   - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`).
 - `--round_digits` : decimal places for numeric values (default 2).
 - `--verbose` : print debug info (useful while wiring up a new workbook).

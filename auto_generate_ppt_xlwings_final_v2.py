@@ -411,7 +411,7 @@ def main():
     ap.add_argument("--out", default="deck.pptx", help="Output PPTX")
     ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
     ap.add_argument("--key_header", default=None, help="Column to display in detail tables (e.g., 'Product')")
-    ap.add_argument("--link_mode", choices=["text","overlay"], default="overlay", help="How to create links on summary cells")
+    ap.add_argument("--link_mode", choices=["text","overlay"], default="text", help="How to create links on summary cells")
     ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
     ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--round_digits", type=int, default=2, help="Decimal places for numeric values")
