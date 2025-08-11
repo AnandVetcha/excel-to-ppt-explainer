@@ -19,6 +19,7 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
   - a **filtered** slice of the raw Excel **Table** (ListObject), restricted to only the columns referenced by that formula (plus a key column, which defaults to the first raw table column but can be set via `--key_header`).
 - Hyperlinks can be created as **overlay shapes** on top of each cell (default) or as **text-run** hyperlinks.
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
+- Numeric values are rounded to `--round_digits` decimal places (default 2).
 
 ---
 
@@ -53,6 +54,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
   --out deck.pptx ^
   --link_mode overlay ^
   --table_font_pt 12 ^
+  --round_digits 2 ^
   --verbose
 ```
 
@@ -66,6 +68,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--out` : output PPTX path.
 - `--link_mode` : `overlay` (transparent rectangles on top of each numeric cell; **default**) or `text` (hyperlink on the number text; no shapes).
   - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`).
+- `--round_digits` : decimal places for numeric values (default 2).
 - `--verbose` : print debug info (useful while wiring up a new workbook).
 
 ---
