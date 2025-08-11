@@ -221,7 +221,19 @@ def format_number(val, round_digits: int) -> str:
     return str(val)
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12, key_header: str=None, round_digits: int=2):
+def build_ppt_xlwings(
+    xlsx_path: Path,
+    out_path: Path,
+    sheet_name: str,
+    summary_start: str,
+    raw_table_name: str = None,
+    verbose: bool = False,
+    link_mode: str = "overlay",
+    table_font_pt: int = 12,
+    key_header: str = None,
+    round_digits: int = 2,
+    pptx_in_path: Path = None,
+):
     app = xw.App(visible=False, add_book=False)
     try:
         wb = xw.Book(xlsx_path)
@@ -261,7 +273,7 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                     print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula_found={bool(f)}")
             summary.append(items)
 
-        prs = Presentation()
+        prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
         # Title Only layout
         summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
         summary_slide.shapes.title.text = "Summary Table"
@@ -421,7 +433,8 @@ def main():
     ap.add_argument("--xlsx", required=True, help="Path to Excel file")
     ap.add_argument("--sheet", default="Sheet1", help="Worksheet name")
     ap.add_argument("--summary_start", required=True, help="Top-left data cell of summary (e.g., A12)")
-    ap.add_argument("--out", default="deck.pptx", help="Output PPTX")
+    ap.add_argument("--pptx_in", default=None, help="Existing PPTX to append slides to")
+    ap.add_argument("--out", default=None, help="Output PPTX (defaults to --pptx_in or 'deck.pptx')")
     ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
     ap.add_argument("--key_header", default=None, help="Column to display in detail tables (e.g., 'Product')")
     ap.add_argument("--link_mode", choices=["text","overlay"], default="text", help="How to create links on summary cells")
@@ -434,9 +447,11 @@ def main():
     if font_pt is None:
         font_pt = 12
 
+    out_path = Path(args.out) if args.out else Path(args.pptx_in) if args.pptx_in else Path("deck.pptx")
+
     out = build_ppt_xlwings(
         xlsx_path=Path(args.xlsx),
-        out_path=Path(args.out),
+        out_path=out_path,
         sheet_name=args.sheet,
         summary_start=args.summary_start,
         raw_table_name=args.raw_table,
@@ -445,6 +460,7 @@ def main():
         table_font_pt=font_pt,
         key_header=args.key_header,
         round_digits=args.round_digits,
+        pptx_in_path=Path(args.pptx_in) if args.pptx_in else None,
     )
     print(f"PPT created: {out}")
 
