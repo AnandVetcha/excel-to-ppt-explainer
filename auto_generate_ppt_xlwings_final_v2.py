@@ -350,12 +350,16 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                     run.hyperlink.target_slide = target  # backup link
 
         # recompute actual grid
-        col_lefts = [int(left)]
+        table_left = int(table_shape.left)
+        table_top = int(table_shape.top)
+
+        col_lefts = [table_left]
         for j in range(1, sum_cols):
-            col_lefts.append(col_lefts[-1] + int(table.columns[j-1].width))
-        row_tops = [int(top)]
-        for i in range(1, sum_rows):
-            row_tops.append(row_tops[-1] + int(table.rows[i-1].height))
+            col_lefts.append(col_lefts[-1] + int(table.columns[j - 1].width))
+
+        row_tops = [table_top]
+        for i in range(sum_rows):
+            row_tops.append(row_tops[-1] + int(table.rows[i].height))
 
         # overlays in FRONT
         if link_mode == "overlay":
@@ -371,7 +375,7 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                     x = col_lefts[j]
                     y = row_tops[i]
                     w = int(table.columns[j].width)
-                    h = int(table.rows[i].height)
+                    h = row_tops[i + 1] - row_tops[i]
                     add_overlay_link(summary_slide, x, y, w, h, target)
 
         prs.save(out_path)
