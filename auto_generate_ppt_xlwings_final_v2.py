@@ -270,7 +270,10 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
         sum_cols = len(headers)
         sum_rows = len(summary) + 1
         left, top, width = Inches(0.5), Inches(1.5), Inches(9.5)
-        base_row_height = Inches(0.4)
+        if link_mode == "text":
+            base_row_height = Inches(0.4 * table_font_pt / 18)
+        else:
+            base_row_height = Inches(0.4)
         table_shape = summary_slide.shapes.add_table(sum_rows, sum_cols, left, top, width, base_row_height * sum_rows)
         table = table_shape.table
 
@@ -337,7 +340,17 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
                 # Snippet
                 rows, cols = df_snippet.shape
-                s_table = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), Inches(0.6 + 0.3*max(rows,1))).table
+                if link_mode == "text":
+                    snip_row_height = Inches(0.4 * table_font_pt / 18)
+                    snip_height = snip_row_height * (rows + 1)
+                else:
+                    snip_height = Inches(0.6 + 0.3*max(rows,1))
+                    snip_row_height = None
+                s_table_shape = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), snip_height)
+                s_table = s_table_shape.table
+                if snip_row_height is not None:
+                    for rr in range(rows+1):
+                        s_table.rows[rr].height = int(snip_row_height)
                 for jj, hh in enumerate(df_snippet.columns):
                     tfh = s_table.cell(0, jj).text_frame; tfh.clear()
                     r0 = tfh.paragraphs[0].add_run(); r0.text = str(hh); r0.font.bold = True; r0.font.size = Pt(table_font_pt)
