@@ -12,7 +12,7 @@ auto_generate_ppt_xlwings_final.py
 - (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --out deck.pptx  --link_mode overlay  --table_font_pt 12   --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12   --verbose
 """
 import argparse
 import re
@@ -184,7 +184,7 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
     return rect
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12):
+def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12, key_header: str=None):
     app = xw.App(visible=False, add_book=False)
     try:
         wb = xw.Book(xlsx_path)
@@ -197,6 +197,9 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
         hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(sht, summary_start, verbose=verbose)
         if not headers or not data_rows:
             raise RuntimeError("Could not detect headers or data rows; check --summary_start.")
+
+        if key_header is None:
+            key_header = str(headers[0])
 
         # collect formulas/values
         last_row_in_block = data_rows[-1]
@@ -256,7 +259,6 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
 
         # build detail slides first
         detail_slide_map = {}
-        key_header = str(headers[0])
         for i, row in enumerate(summary, start=1):
             key = row["key"]
             for j, metric in enumerate(headers[1:], start=1):
@@ -370,6 +372,7 @@ def main():
     ap.add_argument("--summary_start", required=True, help="Top-left data cell of summary (e.g., A12)")
     ap.add_argument("--out", default="deck.pptx", help="Output PPTX")
     ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
+    ap.add_argument("--key_header", default=None, help="Column to display in detail tables (e.g., 'Product')")
     ap.add_argument("--link_mode", choices=["text","overlay"], default="overlay", help="How to create links on summary cells")
     ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
     ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
@@ -388,6 +391,7 @@ def main():
         verbose=args.verbose,
         link_mode=args.link_mode,
         table_font_pt=font_pt,
+        key_header=args.key_header,
     )
     print(f"PPT created: {out}")
 
