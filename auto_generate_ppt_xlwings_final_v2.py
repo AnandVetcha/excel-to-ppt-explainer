@@ -9,10 +9,11 @@ auto_generate_ppt_xlwings_final.py
 - Overlays are aligned using ACTUAL table widths/heights after text is placed.
 - We still add run-level links to the numbers as a backup.
 - Table font size is set with --table_font_pt (default 12) and word_wrap=False.
+- Numeric values are rounded using --round_digits (default 2).
 - (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12   --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
 """
 import argparse
 import re
@@ -183,8 +184,17 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
     rect.click_action.target_slide = target_slide
     return rect
 
+# ---------------- Formatting helper ----------------
+def format_number(val, round_digits: int) -> str:
+    if val is None:
+        return ""
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        fmt = f"{{:.{round_digits}f}}"
+        return fmt.format(val)
+    return str(val)
+
 # ---------------- Builder ----------------
-def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12, key_header: str=None):
+def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_start: str, raw_table_name: str=None, verbose: bool=False, link_mode: str="overlay", table_font_pt: int=12, key_header: str=None, round_digits: int=2):
     app = xw.App(visible=False, add_book=False)
     try:
         wb = xw.Book(xlsx_path)
@@ -297,7 +307,7 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
                 p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14) 
-                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {info['value']}"; p3.level = 1;p3.font.size = Pt(14)  
+                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
                 # Snippet
                 rows, cols = df_snippet.shape
                 s_table = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), Inches(0.6 + 0.3*max(rows,1))).table
@@ -310,7 +320,7 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
                         cell = s_table.cell(ii+1, jj)
                         tfcell = cell.text_frame; tfcell.clear()
                         run = tfcell.paragraphs[0].add_run()
-                        run.text = "" if val is None else str(val)
+                        run.text = format_number(val, round_digits)
                         run.font.size = Pt(table_font_pt)
                 detail_slide_map[(i, metric)] = slide
 
@@ -318,13 +328,13 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
         for i, row in enumerate(summary, start=1):
             tf0 = table.cell(i, 0).text_frame; tf0.clear()
             run0 = tf0.paragraphs[0].add_run()
-            run0.text = "" if row['key'] is None else str(row['key'])
+            run0.text = format_number(row['key'], round_digits)
             run0.font.size = Pt(table_font_pt)
             for j, metric in enumerate(headers[1:], start=1):
                 tf = table.cell(i, j).text_frame; tf.clear()
                 run = tf.paragraphs[0].add_run()
                 val = row["cells"][metric]["value"]
-                text = "" if val is None else (f"{val:.6g}" if isinstance(val, (int,float)) and not isinstance(val, bool) else str(val))
+                text = format_number(val, round_digits)
                 run.text = text
                 run.font.size = Pt(table_font_pt)
                 target = detail_slide_map.get((i, metric))
@@ -376,6 +386,7 @@ def main():
     ap.add_argument("--link_mode", choices=["text","overlay"], default="overlay", help="How to create links on summary cells")
     ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
     ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--round_digits", type=int, default=2, help="Decimal places for numeric values")
     ap.add_argument("--verbose", action="store_true", help="Debug prints")
     args = ap.parse_args()
     font_pt = args.table_font_pt if args.table_font_pt is not None else args.header_font_pt
@@ -392,6 +403,7 @@ def main():
         link_mode=args.link_mode,
         table_font_pt=font_pt,
         key_header=args.key_header,
+        round_digits=args.round_digits,
     )
     print(f"PPT created: {out}")
 
