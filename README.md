@@ -16,7 +16,7 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
 - Numbers on the summary slide link to per-metric **detail slides**.
 - Each detail slide shows:
   - the original **formula** (as stored in Excel);
-  - a **filtered** slice of the raw Excel **Table** (ListObject), restricted to only the columns referenced by that formula (plus the key column).
+  - a **filtered** slice of the raw Excel **Table** (ListObject), restricted to only the columns referenced by that formula (plus a key column, which defaults to the first raw table column but can be set via `--key_header`).
 - Hyperlinks can be created as **overlay shapes** on top of each cell (default) or as **text-run** hyperlinks.
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
 
@@ -49,6 +49,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
   --sheet Sheet1 ^
   --summary_start A12 ^
   --raw_table Raw_Data ^
+  --key_header Product ^
   --out deck.pptx ^
   --link_mode overlay ^
   --table_font_pt 12 ^
@@ -61,6 +62,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--sheet` : worksheet containing the **raw table** and **summary**.
 - `--summary_start` : the top-left **data** cell of the summary (first row below headers), e.g. `A12`.
 - `--raw_table` : name of the Excel **Table** (ListObject) with raw data.
+- `--key_header` : column used as the key in detail tables (e.g., `Product`). Defaults to the first column of the raw table.
 - `--out` : output PPTX path.
 - `--link_mode` : `overlay` (transparent rectangles on top of each numeric cell; **default**) or `text` (hyperlink on the number text; no shapes).
   - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`).
@@ -76,7 +78,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 4. For each summary cell:
    - A detail slide is created:
      - the **formula** is printed;
-     - a **filtered** view of the raw table is shown (only the columns used by that formula + the key column).
+     - a **filtered** view of the raw table is shown (only the columns used by that formula + a configurable key column via `--key_header`).
    - On Slide 1, the numeric value is made **clickable** (overlay or text hyperlink) and jumps to the corresponding detail slide.
 
 ---
