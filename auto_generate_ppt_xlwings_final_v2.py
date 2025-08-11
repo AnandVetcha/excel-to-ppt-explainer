@@ -278,10 +278,14 @@ def build_ppt_xlwings(
         summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
         summary_slide.shapes.title.text = "Summary Table"
 
-        # table scaffold
+        # table scaffold aligned with title margins
         sum_cols = len(headers)
         sum_rows = len(summary) + 1
-        left, top, width = Inches(0.5), Inches(1.5), Inches(9.5)
+        title_shape = summary_slide.shapes.title
+        left = title_shape.left
+        right_margin = prs.slide_width - (title_shape.left + title_shape.width)
+        top = title_shape.top + title_shape.height + Inches(0.2)
+        width = prs.slide_width - left - right_margin
         if link_mode == "text":
             base_row_height = Inches(0.4 * table_font_pt / 18)
         else:
@@ -333,10 +337,15 @@ def build_ppt_xlwings(
 
                 slide = prs.slides.add_slide(prs.slide_layouts[5])
                 slide.shapes.title.text = f"{key} – {metric}"
+                title_shape = slide.shapes.title
+                right_margin = prs.slide_width - (title_shape.left + title_shape.width)
+                content_left = title_shape.left
+                content_width = prs.slide_width - content_left - right_margin
                 # Home button to return to summary
+                btn_left = prs.slide_width - right_margin - Inches(0.5)
                 btn = slide.shapes.add_shape(
                     MSO_SHAPE.ACTION_BUTTON_HOME,
-                    Inches(9.0),
+                    btn_left,
                     Inches(0.2),
                     Inches(0.5),
                     Inches(0.5),
@@ -344,11 +353,13 @@ def build_ppt_xlwings(
                 btn.click_action.target_slide = summary_slide
                 btn.text_frame.text = ""
                 # Formula box
-                tx = slide.shapes.add_textbox(Inches(0.5), Inches(1.2), Inches(9.2), Inches(1.2))
+                formula_height = Inches(1.2)
+                formula_top = title_shape.top + title_shape.height + Inches(0.2)
+                tx = slide.shapes.add_textbox(content_left, formula_top, content_width, formula_height)
                 tf = tx.text_frame; tf.clear()
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
-                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14) 
+                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
                 p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
                 # Snippet
                 rows, cols = df_snippet.shape
@@ -358,7 +369,8 @@ def build_ppt_xlwings(
                 else:
                     snip_height = Inches(0.6 + 0.3*max(rows,1))
                     snip_row_height = None
-                s_table_shape = slide.shapes.add_table(rows+1, cols, Inches(0.5), Inches(2.6), Inches(9.2), snip_height)
+                snip_top = formula_top + formula_height + Inches(0.2)
+                s_table_shape = slide.shapes.add_table(rows+1, cols, content_left, snip_top, content_width, snip_height)
                 s_table = s_table_shape.table
                 if snip_row_height is not None:
                     for rr in range(rows+1):

@@ -20,7 +20,7 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
 - Hyperlinks can be created as **overlay shapes** on top of each cell (default) or as **text-run** hyperlinks.
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
 - Numeric values are rounded to `--round_digits` decimal places (default 2).
-- Can optionally append all generated slides to an **existing** PowerPoint file.
+- Can optionally append all generated slides to an **existing** PowerPoint file; when the template uses a wider slide size, navigation buttons and tables align with the title placeholders.
 
 ---
 
