@@ -1,26 +1,18 @@
-
 """
-auto_generate_ppt_xlwings_final.py
+auto_generate_ppt.py
 
-- Shapes-based hyperlinks are the default (in FRONT of the table).
-- True transparency for overlays:
-    1) Try python-pptx API: fore_color.transparency = 1.0 (fallback: fill.transparency = 1.0)
-    2) Also force the underlying DrawingML: <a:solidFill><a:srgbClr ...><a:alpha val="0"/></a:srgbClr></a:solidFill>
-- Overlays are aligned using ACTUAL table widths/heights after text is placed.
-- We still add run-level links to the numbers as a backup.
-- Table font size is set with --table_font_pt (default 12) and word_wrap=False.
-- Numeric values are rounded using --round_digits (default 2).
-- (Deprecated alias: --header_font_pt)
+Generate a PowerPoint from an Excel workbook using openpyxl + python-pptx.
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
+python auto_generate_ppt.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
 """
 import argparse
 import re
 from pathlib import Path
 
 import pandas as pd
-import xlwings as xw
+from openpyxl import load_workbook
+from openpyxl.utils.cell import coordinate_from_string, column_index_from_string, get_column_letter
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import MSO_SHAPE
@@ -31,23 +23,19 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
 # ---------------- Excel helpers ----------------
 def get_formula_str(cell):
-    for attr in ("Formula2", "Formula"):
-        try:
-            s = getattr(cell.api, attr)
-            if isinstance(s, str) and s.startswith("="):
-                return s
-        except Exception:
-            pass
+    val = cell.value
+    if isinstance(val, str) and val.startswith("="):
+        return val
     return None
 
-def detect_summary_region_from_start(sht, start_addr, max_cols=60, verbose=False):
-    start_cell = sht.range(start_addr)
-    hdr_row = start_cell.row - 1
-    start_col = start_cell.column
+def detect_summary_region_from_start(ws, start_addr, max_cols=60, verbose=False):
+    col_letter, start_row = coordinate_from_string(start_addr)
+    start_col = column_index_from_string(col_letter)
+    hdr_row = start_row - 1
 
     headers, c = [], start_col
     while True:
-        val = sht.range((hdr_row, c)).value
+        val = ws.cell(row=hdr_row, column=c).value
         if val in (None, ""):
             break
         headers.append(str(val))
@@ -55,9 +43,9 @@ def detect_summary_region_from_start(sht, start_addr, max_cols=60, verbose=False
         if c - start_col > max_cols:
             break
 
-    data_rows, r = [], start_cell.row
+    data_rows, r = [], start_row
     while True:
-        v = sht.range((r, start_col)).value
+        v = ws.cell(row=r, column=start_col).value
         if v in (None, ""):
             break
         data_rows.append(r)
@@ -92,36 +80,36 @@ def parse_structured_columns(formula, table_name):
         i = j
     return cols
 
-def extract_filter_key(formula, table_name, sht, row_idx, key_col_idx):
+def extract_filter_key(formula, table_name, ws, row_idx, key_col_idx):
     if not formula:
         return (None, None)
     s = formula.replace(" ", "")
-    col_letter = xw.utils.col_name(key_col_idx)
+    col_letter = get_column_letter(key_col_idx)
     pat = re.compile(
-        rf"(?:{re.escape(table_name)}\[([^\]]+?)\]=\$?{col_letter}\$?{row_idx}|\$?{col_letter}\$?{row_idx}={re.escape(table_name)}\[([^\]]+?)\])"
+        rf"(?:{re.escape(table_name)}\\[([^\\]]+?)\\]=\\$?{col_letter}\\$?{row_idx}|\\$?{col_letter}\\$?{row_idx}={re.escape(table_name)}\\[([^\\]]+?)\\])"
     )
     m = pat.search(s)
     if m:
         col = (m.group(1) or m.group(2) or "").replace("'", "")
-        key_value = sht.range((row_idx, key_col_idx)).value
+        key_value = ws.cell(row=row_idx, column=key_col_idx).value
         return (col, key_value)
     return (None, None)
 
-def read_listobject_df(sht, lo_name=None):
-    lo = None
+def read_listobject_df(ws, lo_name=None):
+    table = None
     if lo_name:
-        try:
-            lo = sht.api.ListObjects(lo_name)
-        except Exception:
-            lo = None
-    if lo is None:
-        if sht.api.ListObjects.Count >= 1:
-            lo = sht.api.ListObjects(1)
+        table = ws.tables.get(lo_name)
+    if table is None:
+        if ws.tables:
+            table = next(iter(ws.tables.values()))
         else:
             raise RuntimeError("No Excel Table (ListObject) found on this sheet.")
-    addr = lo.Range.Address
-    df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
-    return df, lo.Name
+    ref = table.ref
+    data = ws[ref]
+    rows = [[cell.value for cell in row] for row in data]
+    headers = rows[0]
+    df = pd.DataFrame(rows[1:], columns=headers)
+    return df, table.name
 
 def guess_key_col(df_raw, preferred_name):
     import re as _re
@@ -153,15 +141,14 @@ def _force_xml_alpha_zero(shape):
         if not scheme:
             return
         clr = scheme[0]
-    # remove any existing alpha child
     for a in clr.xpath('./a:alpha'):
         clr.remove(a)
     alpha = OxmlElement('a:alpha')
-    alpha.set('val', '0')  # 0 = 0% opacity
+    alpha.set('val', '0')
     clr.append(alpha)
+
 def add_overlay_link(summary_slide, x, y, w, h, target_slide):
     rect = summary_slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x, y, w, h)
-    # Make invisible
     rect.fill.solid()
     rect.fill.fore_color.rgb = RGBColor(255, 255, 255)
     ok = False
@@ -175,7 +162,6 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
         ok = True
     except Exception:
         pass
-    # XML-level fallback (always run to be safe)
     _force_xml_alpha_zero(rect)
 
     rect.line.fill.background()
@@ -187,20 +173,8 @@ def add_overlay_link(summary_slide, x, y, w, h, target_slide):
 
 
 def link_run_to_slide(run, dest_slide, tooltip_text: str = ""):
-    """Attach an internal hyperlink to a run that jumps to ``dest_slide``.
-
-    Parameters
-    ----------
-    run : pptx.text.text._Run
-        Run to link.
-    dest_slide : pptx.slide.Slide
-        Slide to jump to when the run is clicked.
-    tooltip_text : str, optional
-        Tooltip to display on hover.
-    """
     rId = run.part.relate_to(dest_slide.part, RT.SLIDE)
     rPr = run._r.get_or_add_rPr()
-    # remove any existing run-level hyperlink
     for child in list(rPr):
         if child.tag.endswith("hlinkClick"):
             rPr.remove(child)
@@ -221,7 +195,7 @@ def format_number(val, round_digits: int) -> str:
     return str(val)
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(
+def build_ppt(
     xlsx_path: Path,
     out_path: Path,
     sheet_name: str,
@@ -234,51 +208,49 @@ def build_ppt_xlwings(
     round_digits: int = 2,
     pptx_in_path: Path = None,
 ):
-    app = xw.App(visible=False, add_book=False)
+    wb_vals = load_workbook(xlsx_path, data_only=True)
+    wb_forms = load_workbook(xlsx_path, data_only=False)
     try:
-        wb = xw.Book(xlsx_path)
-        sht = wb.sheets[sheet_name] if sheet_name else wb.sheets.active
-        wb.app.api.CalculateFull()
+        ws_vals = wb_vals[sheet_name] if sheet_name else wb_vals.active
+        ws_forms = wb_forms[sheet_name] if sheet_name else wb_forms.active
 
-        df_raw, actual_table_name = read_listobject_df(sht, raw_table_name)
+        df_raw, actual_table_name = read_listobject_df(ws_vals, raw_table_name)
         raw_table_name = actual_table_name
 
-        hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(sht, summary_start, verbose=verbose)
+        hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(ws_vals, summary_start, verbose=verbose)
         if not headers or not data_rows:
             raise RuntimeError("Could not detect headers or data rows; check --summary_start.")
 
         if key_header is None:
             key_header = str(headers[0])
 
-        # collect formulas/values
         last_row_in_block = data_rows[-1]
         summary = []
         for r in data_rows:
-            key_value = sht.range((r, start_col_idx)).value
+            key_value = ws_vals.cell(row=r, column=start_col_idx).value
             items = {"row": r, "key": key_value, "cells": {}}
             for c_off, h in enumerate(headers[1:], start=1):
                 c_idx = start_col_idx + c_off
-                rng = sht.range((r, c_idx))
-                f = get_formula_str(rng)
+                cell_f = ws_forms.cell(row=r, column=c_idx)
+                cell_v = ws_vals.cell(row=r, column=c_idx)
+                f = get_formula_str(cell_f)
                 if not f:
                     rr = r - 1
                     while rr >= hdr_row + 1 and not f:
-                        f = get_formula_str(sht.range((rr, c_idx))); rr -= 1
+                        f = get_formula_str(ws_forms.cell(row=rr, column=c_idx)); rr -= 1
                     if not f:
                         rr = r + 1
                         while rr <= last_row_in_block and not f:
-                            f = get_formula_str(sht.range((rr, c_idx))); rr += 1
-                items["cells"][h] = {"address": rng.get_address(), "formula": f, "value": rng.value}
+                            f = get_formula_str(ws_forms.cell(row=rr, column=c_idx)); rr += 1
+                items["cells"][h] = {"address": cell_f.coordinate, "formula": f, "value": cell_v.value}
                 if verbose:
                     print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula_found={bool(f)}")
             summary.append(items)
 
         prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
-        # Title Only layout
         summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
         summary_slide.shapes.title.text = "Summary Table"
 
-        # table scaffold aligned with title margins
         sum_cols = len(headers)
         sum_rows = len(summary) + 1
         title_shape = summary_slide.shapes.title
@@ -303,7 +275,6 @@ def build_ppt_xlwings(
         for i in range(sum_rows):
             table.rows[i].height = int(base_row_height)
 
-        # header text (no wrap)
         for j, h in enumerate(headers):
             tf = table.cell(0, j).text_frame
             tf.clear()
@@ -313,7 +284,6 @@ def build_ppt_xlwings(
             run.font.bold = True
             run.font.size = Pt(table_font_pt)
 
-        # build detail slides first
         detail_slide_map = {}
         for i, row in enumerate(summary, start=1):
             key = row["key"]
@@ -324,7 +294,7 @@ def build_ppt_xlwings(
                 cols_used = [c for c in cols_used if c in df_raw.columns]
                 if not cols_used:
                     cols_used = [key_header] if key_header in df_raw.columns else list(df_raw.columns)
-                colname, key_from_formula = extract_filter_key(formula, raw_table_name, sht, row["row"], key_col_idx=start_col_idx)
+                colname, key_from_formula = extract_filter_key(formula, raw_table_name, ws_vals, row["row"], key_col_idx=start_col_idx)
                 if colname is None:
                     colname = guess_key_col(df_raw, key_header)
                 key_val = key_from_formula if key_from_formula is not None else key
@@ -341,7 +311,6 @@ def build_ppt_xlwings(
                 right_margin = prs.slide_width - (title_shape.left + title_shape.width)
                 content_left = title_shape.left
                 content_width = prs.slide_width - content_left - right_margin
-                # Home button to return to summary
                 btn_left = prs.slide_width - right_margin - Inches(0.5)
                 btn = slide.shapes.add_shape(
                     MSO_SHAPE.ACTION_BUTTON_HOME,
@@ -352,7 +321,6 @@ def build_ppt_xlwings(
                 )
                 btn.click_action.target_slide = summary_slide
                 btn.text_frame.text = ""
-                # Formula box
                 formula_height = Inches(1.2)
                 formula_top = title_shape.top + title_shape.height + Inches(0.2)
                 tx = slide.shapes.add_textbox(content_left, formula_top, content_width, formula_height)
@@ -360,8 +328,7 @@ def build_ppt_xlwings(
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
                 p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
-                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
-                # Snippet
+                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1; p3.font.size = Pt(14)
                 rows, cols = df_snippet.shape
                 if link_mode == "text":
                     snip_row_height = Inches(0.4 * table_font_pt / 18)
@@ -388,15 +355,14 @@ def build_ppt_xlwings(
                         run.font.size = Pt(table_font_pt)
                 detail_slide_map[(i, metric)] = slide
 
-        # write summary values
         for i, row in enumerate(summary, start=1):
             tf0 = table.cell(i, 0).text_frame; tf0.clear()
             run0 = tf0.paragraphs[0].add_run()
             run0.text = format_number(row['key'], round_digits)
             run0.font.size = Pt(table_font_pt)
             for j, metric in enumerate(headers[1:], start=1):
-                tf = table.cell(i, j).text_frame; tf.clear()
-                run = tf.paragraphs[0].add_run()
+                tfc = table.cell(i, j).text_frame; tfc.clear()
+                run = tfc.paragraphs[0].add_run()
                 val = row["cells"][metric]["value"]
                 text = format_number(val, round_digits)
                 run.text = text
@@ -406,7 +372,6 @@ def build_ppt_xlwings(
                     tooltip = target.shapes.title.text if target.shapes.title else ""
                     link_run_to_slide(run, target, tooltip_text=tooltip)
 
-        # recompute actual grid
         col_lefts = [int(left)]
         for j in range(1, sum_cols):
             col_lefts.append(col_lefts[-1] + int(table.columns[j-1].width))
@@ -414,7 +379,6 @@ def build_ppt_xlwings(
         for i in range(1, sum_rows):
             row_tops.append(row_tops[-1] + int(table.rows[i-1].height))
 
-        # overlays in FRONT
         if link_mode == "overlay":
             for i in range(1, sum_rows):
                 for j, metric in enumerate(headers[1:], start=1):
@@ -434,11 +398,8 @@ def build_ppt_xlwings(
         prs.save(out_path)
         return out_path
     finally:
-        try:
-            wb.close()
-        except Exception:
-            pass
-        app.quit()
+        wb_vals.close()
+        wb_forms.close()
 
 def main():
     ap = argparse.ArgumentParser()
@@ -461,7 +422,7 @@ def main():
 
     out_path = Path(args.out) if args.out else Path(args.pptx_in) if args.pptx_in else Path("deck.pptx")
 
-    out = build_ppt_xlwings(
+    out = build_ppt(
         xlsx_path=Path(args.xlsx),
         out_path=out_path,
         sheet_name=args.sheet,
