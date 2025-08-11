@@ -243,8 +243,16 @@ def build_ppt_xlwings(xlsx_path: Path, out_path: Path, sheet_name: str, summary_
         sum_cols = len(headers)
         sum_rows = len(summary) + 1
         left, top, width = Inches(0.5), Inches(1.5), Inches(9.5)
-        base_row_height = Inches(0.4)
-        table_shape = summary_slide.shapes.add_table(sum_rows, sum_cols, left, top, width, base_row_height * sum_rows)
+        # Derive a row height that scales with the font size.
+        # 0.4" works well for an 18pt font, so convert 0.4" to points and
+        # use that to compute a proportional height for the requested font size.
+        points_per_inch = 72
+        row_height_pt = (0.4 * points_per_inch / 18) * table_font_pt
+        base_row_height = Pt(row_height_pt)
+
+        table_shape = summary_slide.shapes.add_table(
+            sum_rows, sum_cols, left, top, width, base_row_height * sum_rows
+        )
         table = table_shape.table
 
         total_w = int(width)
