@@ -56,6 +56,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
   --link_mode overlay ^
   --table_font_pt 12 ^
   --round_digits 2 ^
+  --skip_cols 2 4 ^
   --verbose
 ```
 
@@ -71,6 +72,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 - `--link_mode` : `text` (hyperlink on the number text; no shapes; **default**) or `overlay` (transparent rectangles on top of each numeric cell).
 - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`). When `--link_mode` is `text`, row heights scale with this value (0.4" at 18pt).
 - `--round_digits` : decimal places for numeric values (default 2).
+- `--skip_cols` : one-based indexes of data columns (excluding the key column) to skip linking.
 - `--verbose` : print debug info (useful while wiring up a new workbook).
 
 ---
