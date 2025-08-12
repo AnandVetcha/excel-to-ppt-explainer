@@ -48,9 +48,8 @@ pandas>=2.0
 ```bash
 python auto_generate_ppt_xlwings_final_v2.py ^
   --xlsx sample_sales_mix.xlsx ^
-  --sheet Sheet1 ^
+  --sheet Summary ^
   --summary_start A12 ^
-  --raw_table Raw_Data ^
   --key_header Product ^
   --pptx_in Power_point_input.pptx ^
   --out deck.pptx ^
@@ -63,9 +62,9 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 **Arguments**
 
 - `--xlsx` : path to the workbook.
-- `--sheet` : worksheet containing the **raw table** and **summary**.
+- `--sheet` : worksheet containing the **summary table** (raw tables may be on any sheet).
 - `--summary_start` : the top-left **data** cell of the summary (first row below headers), e.g. `A12`.
-- `--raw_table` : name of the Excel **Table** (ListObject) with raw data.
+- `--raw_table` : optional default Excel **Table** name. If omitted, the script auto-detects tables and each summary column may reference a different table.
 - `--key_header` : column used as the key in detail tables (e.g., `Product`). Defaults to the first column of the raw table.
 - `--pptx_in` : optional existing PowerPoint file to append the generated slides to.
 - `--out` : output PPTX path. Defaults to the value of `--pptx_in` (if provided) or `deck.pptx`.

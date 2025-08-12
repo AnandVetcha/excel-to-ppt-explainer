@@ -13,7 +13,7 @@ auto_generate_ppt_xlwings_final.py
 - (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --raw_table Raw_Data  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
 """
 import argparse
 import re
@@ -92,6 +92,17 @@ def parse_structured_columns(formula, table_name):
         i = j
     return cols
 
+def extract_table_names(formula):
+    if not formula:
+        return []
+    s = formula.replace("'", "")
+    names = re.findall(r"([A-Za-z0-9_]+)\[", s)
+    seen = []
+    for n in names:
+        if n not in seen:
+            seen.append(n)
+    return seen
+
 def extract_filter_key(formula, table_name, sht, row_idx, key_col_idx):
     if not formula:
         return (None, None)
@@ -122,6 +133,29 @@ def read_listobject_df(sht, lo_name=None):
     addr = lo.Range.Address
     df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
     return df, lo.Name
+
+def read_all_listobject_dfs(sht):
+    tables = {}
+    if sht.api.ListObjects.Count < 1:
+        raise RuntimeError("No Excel Table (ListObject) found on this sheet.")
+    for i in range(1, sht.api.ListObjects.Count + 1):
+        lo = sht.api.ListObjects(i)
+        addr = lo.Range.Address
+        df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
+        tables[lo.Name] = df
+    return tables
+
+def read_all_tables(wb):
+    """Return DataFrames for all Excel Tables across every sheet in ``wb``."""
+    tables = {}
+    for sht in wb.sheets:
+        try:
+            tables.update(read_all_listobject_dfs(sht))
+        except RuntimeError:
+            continue
+    if not tables:
+        raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
+    return tables
 
 def guess_key_col(df_raw, preferred_name):
     import re as _re
@@ -240,8 +274,11 @@ def build_ppt_xlwings(
         sht = wb.sheets[sheet_name] if sheet_name else wb.sheets.active
         wb.app.api.CalculateFull()
 
-        df_raw, actual_table_name = read_listobject_df(sht, raw_table_name)
-        raw_table_name = actual_table_name
+        table_dfs = read_all_tables(wb)
+        if raw_table_name and raw_table_name in table_dfs:
+            default_table_name = raw_table_name
+        else:
+            default_table_name = next(iter(table_dfs))
 
         hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(sht, summary_start, verbose=verbose)
         if not headers or not data_rows:
@@ -268,7 +305,13 @@ def build_ppt_xlwings(
                         rr = r + 1
                         while rr <= last_row_in_block and not f:
                             f = get_formula_str(sht.range((rr, c_idx))); rr += 1
-                items["cells"][h] = {"address": rng.get_address(), "formula": f, "value": rng.value}
+                tbls = extract_table_names(f)
+                items["cells"][h] = {
+                    "address": rng.get_address(),
+                    "formula": f,
+                    "value": rng.value,
+                    "table": tbls[0] if tbls else None,
+                }
                 if verbose:
                     print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula_found={bool(f)}")
             summary.append(items)
@@ -320,11 +363,14 @@ def build_ppt_xlwings(
             for j, metric in enumerate(headers[1:], start=1):
                 info = row["cells"][metric]
                 formula = info["formula"]
-                cols_used = [key_header] + parse_structured_columns(formula, raw_table_name)
+                tbl_name = info.get("table") or default_table_name
+                df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
+                cols_used = [key_header] + parse_structured_columns(formula, tbl_name)
+                cols_used = list(dict.fromkeys(cols_used))
                 cols_used = [c for c in cols_used if c in df_raw.columns]
                 if not cols_used:
                     cols_used = [key_header] if key_header in df_raw.columns else list(df_raw.columns)
-                colname, key_from_formula = extract_filter_key(formula, raw_table_name, sht, row["row"], key_col_idx=start_col_idx)
+                colname, key_from_formula = extract_filter_key(formula, tbl_name, sht, row["row"], key_col_idx=start_col_idx)
                 if colname is None:
                     colname = guess_key_col(df_raw, key_header)
                 key_val = key_from_formula if key_from_formula is not None else key
@@ -443,11 +489,11 @@ def build_ppt_xlwings(
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--xlsx", required=True, help="Path to Excel file")
-    ap.add_argument("--sheet", default="Sheet1", help="Worksheet name")
+    ap.add_argument("--sheet", default="Sheet1", help="Worksheet containing the summary table")
     ap.add_argument("--summary_start", required=True, help="Top-left data cell of summary (e.g., A12)")
     ap.add_argument("--pptx_in", default=None, help="Existing PPTX to append slides to")
     ap.add_argument("--out", default=None, help="Output PPTX (defaults to --pptx_in or 'deck.pptx')")
-    ap.add_argument("--raw_table", default=None, help="Excel Table (ListObject) name (optional)")
+    ap.add_argument("--raw_table", default=None, help="Default Excel Table (ListObject) name (optional; auto-detected if omitted)")
     ap.add_argument("--key_header", default=None, help="Column to display in detail tables (e.g., 'Product')")
     ap.add_argument("--link_mode", choices=["text","overlay"], default="text", help="How to create links on summary cells")
     ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
