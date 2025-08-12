@@ -13,7 +13,7 @@ auto_generate_ppt_xlwings_final.py
 - (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --verbose
+python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --skip_cols 2 4  --verbose
 """
 import argparse
 import re
@@ -267,6 +267,7 @@ def build_ppt_xlwings(
     key_header: str = None,
     round_digits: int = 2,
     pptx_in_path: Path = None,
+    skip_col_idxs: list[int] | None = None,
 ):
     app = xw.App(visible=False, add_book=False)
     try:
@@ -317,6 +318,7 @@ def build_ppt_xlwings(
             summary.append(items)
 
         prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
+        skip_set = set(skip_col_idxs or [])
         # Title Only layout
         summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
         summary_slide.shapes.title.text = "Summary Table"
@@ -361,6 +363,8 @@ def build_ppt_xlwings(
         for i, row in enumerate(summary, start=1):
             key = row["key"]
             for j, metric in enumerate(headers[1:], start=1):
+                if j in skip_set:
+                    continue
                 info = row["cells"][metric]
                 formula = info["formula"]
                 tbl_name = info.get("table") or default_table_name
@@ -447,6 +451,8 @@ def build_ppt_xlwings(
                 text = format_number(val, round_digits)
                 run.text = text
                 run.font.size = Pt(table_font_pt)
+                if j in skip_set:
+                    continue
                 target = detail_slide_map.get((i, metric))
                 if target and text != "":
                     tooltip = target.shapes.title.text if target.shapes.title else ""
@@ -464,6 +470,8 @@ def build_ppt_xlwings(
         if link_mode == "overlay":
             for i in range(1, sum_rows):
                 for j, metric in enumerate(headers[1:], start=1):
+                    if j in skip_set:
+                        continue
                     target = detail_slide_map.get((i, metric))
                     if not target:
                         continue
@@ -500,6 +508,13 @@ def main():
     ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--round_digits", type=int, default=2, help="Decimal places for numeric values")
     ap.add_argument("--verbose", action="store_true", help="Debug prints")
+    ap.add_argument(
+        "--skip_cols",
+        type=int,
+        nargs="*",
+        default=[],
+        help="1-based indices of data columns (excluding the key column) to skip linking",
+    )
     args = ap.parse_args()
     font_pt = args.table_font_pt if args.table_font_pt is not None else args.header_font_pt
     if font_pt is None:
@@ -519,6 +534,7 @@ def main():
         key_header=args.key_header,
         round_digits=args.round_digits,
         pptx_in_path=Path(args.pptx_in) if args.pptx_in else None,
+        skip_col_idxs=args.skip_cols,
     )
     print(f"PPT created: {out}")
 
