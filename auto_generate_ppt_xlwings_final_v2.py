@@ -157,6 +157,54 @@ def read_all_tables(wb):
         raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
     return tables
 
+
+def build_table_column_dependencies(wb):
+    """Return a mapping of table -> column -> referenced columns.
+
+    For each Excel Table (ListObject) in ``wb``, look at the first cell of
+    each column's data body range to detect structured references to other
+    columns in the same table. The result is used to ensure that any
+    dependent columns are also included when filtering rows/columns.
+    """
+    deps: dict[str, dict[str, list[str]]] = {}
+    for sht in wb.sheets:
+        try:
+            lo_count = sht.api.ListObjects.Count
+        except Exception:
+            lo_count = 0
+        for i in range(1, lo_count + 1):
+            lo = sht.api.ListObjects(i)
+            col_deps: dict[str, list[str]] = {}
+            for j in range(1, lo.ListColumns.Count + 1):
+                col = lo.ListColumns(j)
+                name = col.Name
+                refs: list[str] = []
+                try:
+                    cell = col.DataBodyRange.Cells(1, 1)
+                    f = get_formula_str(cell)
+                    refs = parse_structured_columns(f, lo.Name)
+                except Exception:
+                    refs = []
+                col_deps[name] = refs
+            deps[lo.Name] = col_deps
+    return deps
+
+
+def expand_with_dependencies(cols: list[str], table_name: str, dep_map: dict[str, dict[str, list[str]]]) -> list[str]:
+    """Expand ``cols`` to include any columns they depend on recursively."""
+    result = list(cols)
+    seen = set(result)
+    table_deps = dep_map.get(table_name, {})
+    idx = 0
+    while idx < len(result):
+        col = result[idx]
+        for dep in table_deps.get(col, []):
+            if dep not in seen:
+                result.append(dep)
+                seen.add(dep)
+        idx += 1
+    return result
+
 def guess_key_col(df_raw, preferred_name):
     import re as _re
     if preferred_name in df_raw.columns:
@@ -276,6 +324,7 @@ def build_ppt_xlwings(
         wb.app.api.CalculateFull()
 
         table_dfs = read_all_tables(wb)
+        table_deps = build_table_column_dependencies(wb)
         if raw_table_name and raw_table_name in table_dfs:
             default_table_name = raw_table_name
         else:
@@ -370,6 +419,7 @@ def build_ppt_xlwings(
                 tbl_name = info.get("table") or default_table_name
                 df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
                 cols_used = [key_header] + parse_structured_columns(formula, tbl_name)
+                cols_used = expand_with_dependencies(cols_used, tbl_name, table_deps)
                 cols_used = list(dict.fromkeys(cols_used))
                 cols_used = [c for c in cols_used if c in df_raw.columns]
                 if not cols_used:
