@@ -70,26 +70,14 @@ def detect_summary_region_from_start(sht, start_addr, max_cols=60, verbose=False
 def parse_structured_columns(formula, table_name):
     if not formula:
         return []
-    cols, target, s, i = [], f"{table_name}[", formula, 0
-    while True:
-        start = s.find(target, i)
-        if start == -1:
-            break
-        j = start + len(target)
-        buf = []
-        while j < len(s):
-            ch = s[j]
-            if ch == ']':
-                if j + 1 < len(s) and s[j+1] == ']':
-                    buf.append(']'); j += 2; continue
-                else:
-                    j += 1; break
-            else:
-                buf.append(ch); j += 1
-        name = ''.join(buf).replace("'", "")
-        if name not in cols:
+    s = formula.replace("'", "")
+    # handle explicit table references, row-specific references, and @ column references
+    pattern = rf"(?:{re.escape(table_name)}\[@\[([^\]]+)\]\]|{re.escape(table_name)}\[([^\]]+)\]|@\[([^\]]+)\])"
+    cols = []
+    for groups in re.findall(pattern, s):
+        name = next((g for g in groups if g), None)
+        if name and name not in cols:
             cols.append(name)
-        i = j
     return cols
 
 def extract_table_names(formula):
@@ -314,7 +302,7 @@ def build_ppt_xlwings(
                     "table": tbls[0] if tbls else None,
                 }
                 if verbose:
-                    print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula_found={bool(f)}")
+                    print(f"[cell] r={r}, c_idx={c_idx}, header={h}, formula={f}")
             summary.append(items)
 
         prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
@@ -369,9 +357,12 @@ def build_ppt_xlwings(
                 formula = info["formula"]
                 tbl_name = info.get("table") or default_table_name
                 df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
-                cols_used = [key_header] + parse_structured_columns(formula, tbl_name)
+                parsed_cols = parse_structured_columns(formula, tbl_name)
+                cols_used = [key_header] + parsed_cols
                 cols_used = list(dict.fromkeys(cols_used))
                 cols_used = [c for c in cols_used if c in df_raw.columns]
+                if verbose:
+                    print(f"[detail] key={key}, metric={metric}, formula={formula}, extracted_cols={parsed_cols}")
                 if not cols_used:
                     cols_used = [key_header] if key_header in df_raw.columns else list(df_raw.columns)
                 colname, key_from_formula = extract_filter_key(formula, tbl_name, sht, row["row"], key_col_idx=start_col_idx)
