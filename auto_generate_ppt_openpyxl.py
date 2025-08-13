@@ -1,6 +1,6 @@
 
 """
-auto_generate_ppt_xlwings_final.py
+auto_generate_ppt_openpyxl.py
 
 - Shapes-based hyperlinks are the default (in FRONT of the table).
 - True transparency for overlays:
@@ -13,14 +13,15 @@ auto_generate_ppt_xlwings_final.py
 - (Deprecated alias: --header_font_pt)
 
 Usage:
-python auto_generate_ppt_xlwings_final_v2.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --skip_cols 2 4  --verbose
+python auto_generate_ppt_openpyxl.py  --xlsx sample_sales_mix.xlsx  --sheet Sheet1  --summary_start A12  --key_header Product  --out deck.pptx  --link_mode overlay  --table_font_pt 12  --round_digits 2  --skip_cols 2 4  --verbose
 """
 import argparse
 import re
 from pathlib import Path
 
 import pandas as pd
-import xlwings as xw
+from openpyxl import load_workbook
+from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter, range_boundaries
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import MSO_SHAPE
@@ -31,23 +32,18 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
 # ---------------- Excel helpers ----------------
 def get_formula_str(cell):
-    for attr in ("Formula2", "Formula"):
-        try:
-            s = getattr(cell.api, attr)
-            if isinstance(s, str) and s.startswith("="):
-                return s
-        except Exception:
-            pass
+    val = cell.value
+    if isinstance(val, str) and val.startswith("="):
+        return val
     return None
 
-def detect_summary_region_from_start(sht, start_addr, max_cols=60, verbose=False):
-    start_cell = sht.range(start_addr)
-    hdr_row = start_cell.row - 1
-    start_col = start_cell.column
+def detect_summary_region_from_start(ws, start_addr, max_cols=60, verbose=False):
+    start_row, start_col = coordinate_to_tuple(start_addr)
+    hdr_row = start_row - 1
 
     headers, c = [], start_col
     while True:
-        val = sht.range((hdr_row, c)).value
+        val = ws.cell(row=hdr_row, column=c).value
         if val in (None, ""):
             break
         headers.append(str(val))
@@ -55,9 +51,9 @@ def detect_summary_region_from_start(sht, start_addr, max_cols=60, verbose=False
         if c - start_col > max_cols:
             break
 
-    data_rows, r = [], start_cell.row
+    data_rows, r = [], start_row
     while True:
-        v = sht.range((r, start_col)).value
+        v = ws.cell(row=r, column=start_col).value
         if v in (None, ""):
             break
         data_rows.append(r)
@@ -107,71 +103,41 @@ def extract_filter_key(formula, table_name, sht, row_idx, key_col_idx):
     if not formula:
         return (None, None)
     s = formula.replace(" ", "")
-    col_letter = xw.utils.col_name(key_col_idx)
+    col_letter = get_column_letter(key_col_idx)
     pat = re.compile(
         rf"(?:{re.escape(table_name)}\[([^\]]+?)\]=\$?{col_letter}\$?{row_idx}|\$?{col_letter}\$?{row_idx}={re.escape(table_name)}\[([^\]]+?)\])"
     )
     m = pat.search(s)
     if m:
         col = (m.group(1) or m.group(2) or "").replace("'", "")
-        key_value = sht.range((row_idx, key_col_idx)).value
+        key_value = sht.cell(row=row_idx, column=key_col_idx).value
         return (col, key_value)
     return (None, None)
-
-def read_listobject_df(sht, lo_name=None):
-    lo = None
-    if lo_name:
-        try:
-            lo = sht.api.ListObjects(lo_name)
-        except Exception:
-            lo = None
-    if lo is None:
-        if sht.api.ListObjects.Count >= 1:
-            lo = sht.api.ListObjects(1)
-        else:
-            raise RuntimeError("No Excel Table (ListObject) found on this sheet.")
-    addr = lo.Range.Address
-    df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
-    return df, lo.Name
-
-def read_all_listobject_dfs(sht):
-    tables = {}
-    if sht.api.ListObjects.Count < 1:
-        raise RuntimeError("No Excel Table (ListObject) found on this sheet.")
-    for i in range(1, sht.api.ListObjects.Count + 1):
-        lo = sht.api.ListObjects(i)
-        addr = lo.Range.Address
-        df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
-        tables[lo.Name] = df
-    return tables
-
-def read_all_tables(wb, verbose: bool = False):
-    """Return DataFrames and column formulas for all Excel Tables in ``wb``."""
+def read_all_tables(wb_formula, wb_values, verbose: bool = False):
+    """Return DataFrames and column formulas for all Excel Tables."""
     tables = {}
     table_formulas = {}
-    for sht in wb.sheets:
-        try:
-            tables.update(read_all_listobject_dfs(sht))
-        except RuntimeError:
+    for ws_formula in wb_formula.worksheets:
+        ws_values = wb_values[ws_formula.title]
+        if not ws_formula.tables:
             continue
-        for i in range(1, sht.api.ListObjects.Count + 1):
-            lo = sht.api.ListObjects(i)
+        for name, tbl in ws_formula.tables.items():
+            min_col, min_row, max_col, max_row = range_boundaries(tbl.ref)
+            headers = [ws_values.cell(row=min_row, column=c).value for c in range(min_col, max_col + 1)]
+            data = []
+            for r in range(min_row + 1, max_row + 1):
+                data.append([ws_values.cell(row=r, column=c).value for c in range(min_col, max_col + 1)])
+            df = pd.DataFrame(data, columns=headers)
+            tables[name] = df
             col_map = {}
-            for j in range(1, lo.ListColumns.Count + 1):
-                col = lo.ListColumns(j)
-                name = col.Name
-                data_body = col.DataBodyRange
-                if data_body is None:
-                    formula = None
-                else:
-                    first_cell = data_body.Cells(1, 1)
-                    cell_rng = sht.range((first_cell.Row, first_cell.Column))
-                    formula = get_formula_str(cell_rng)
-                col_map[name] = formula
+            for j, h in enumerate(headers):
+                cell = ws_formula.cell(row=min_row + 1, column=min_col + j)
+                formula = get_formula_str(cell)
+                col_map[h] = formula
                 if verbose:
-                    parsed = parse_structured_columns(formula, lo.Name) if formula else []
-                    print(f"[table] {lo.Name} column={name} formula={formula} parsed={parsed}")
-            table_formulas[lo.Name] = col_map
+                    parsed = parse_structured_columns(formula, name) if formula else []
+                    print(f"[table] {name} column={h} formula={formula} parsed={parsed}")
+            table_formulas[name] = col_map
     if not tables:
         raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
     return tables, table_formulas
@@ -274,7 +240,7 @@ def format_number(val, round_digits: int) -> str:
     return str(val)
 
 # ---------------- Builder ----------------
-def build_ppt_xlwings(
+def build_ppt_openpyxl(
     xlsx_path: Path,
     out_path: Path,
     sheet_name: str,
@@ -288,19 +254,19 @@ def build_ppt_xlwings(
     pptx_in_path: Path = None,
     skip_col_idxs: list[int] | None = None,
 ):
-    app = xw.App(visible=False, add_book=False)
+    wb_formula = load_workbook(xlsx_path, data_only=False)
+    wb_values = load_workbook(xlsx_path, data_only=True)
     try:
-        wb = xw.Book(xlsx_path)
-        sht = wb.sheets[sheet_name] if sheet_name else wb.sheets.active
-        wb.app.api.CalculateFull()
+        ws_formula = wb_formula[sheet_name] if sheet_name else wb_formula.active
+        ws_values = wb_values[sheet_name] if sheet_name else wb_values.active
 
-        table_dfs, table_formulas = read_all_tables(wb, verbose=verbose)
+        table_dfs, table_formulas = read_all_tables(wb_formula, wb_values, verbose=verbose)
         if raw_table_name and raw_table_name in table_dfs:
             default_table_name = raw_table_name
         else:
             default_table_name = next(iter(table_dfs))
 
-        hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(sht, summary_start, verbose=verbose)
+        hdr_row, headers, data_rows, start_col_idx = detect_summary_region_from_start(ws_values, summary_start, verbose=verbose)
         if not headers or not data_rows:
             raise RuntimeError("Could not detect headers or data rows; check --summary_start.")
 
@@ -311,25 +277,26 @@ def build_ppt_xlwings(
         last_row_in_block = data_rows[-1]
         summary = []
         for r in data_rows:
-            key_value = sht.range((r, start_col_idx)).value
+            key_value = ws_values.cell(row=r, column=start_col_idx).value
             items = {"row": r, "key": key_value, "cells": {}}
             for c_off, h in enumerate(headers[1:], start=1):
                 c_idx = start_col_idx + c_off
-                rng = sht.range((r, c_idx))
-                f = get_formula_str(rng)
+                cell_formula = ws_formula.cell(row=r, column=c_idx)
+                f = get_formula_str(cell_formula)
                 if not f:
                     rr = r - 1
                     while rr >= hdr_row + 1 and not f:
-                        f = get_formula_str(sht.range((rr, c_idx))); rr -= 1
+                        f = get_formula_str(ws_formula.cell(row=rr, column=c_idx)); rr -= 1
                     if not f:
                         rr = r + 1
                         while rr <= last_row_in_block and not f:
-                            f = get_formula_str(sht.range((rr, c_idx))); rr += 1
+                            f = get_formula_str(ws_formula.cell(row=rr, column=c_idx)); rr += 1
                 tbls = extract_table_names(f)
+                val = ws_values.cell(row=r, column=c_idx).value
                 items["cells"][h] = {
-                    "address": rng.get_address(),
+                    "address": cell_formula.coordinate,
                     "formula": f,
-                    "value": rng.value,
+                    "value": val,
                     "table": tbls[0] if tbls else None,
                 }
                 if verbose:
@@ -393,7 +360,7 @@ def build_ppt_xlwings(
                 cols_used = [c for c in cols_used if c in df_raw.columns]
                 if not cols_used:
                     cols_used = [key_header] if key_header in df_raw.columns else list(df_raw.columns)
-                colname, key_from_formula = extract_filter_key(formula, tbl_name, sht, row["row"], key_col_idx=start_col_idx)
+                colname, key_from_formula = extract_filter_key(formula, tbl_name, ws_values, row["row"], key_col_idx=start_col_idx)
                 if colname is None:
                     colname = guess_key_col(df_raw, key_header)
                 key_val = key_from_formula if key_from_formula is not None else key
@@ -507,11 +474,8 @@ def build_ppt_xlwings(
         prs.save(out_path)
         return out_path
     finally:
-        try:
-            wb.close()
-        except Exception:
-            pass
-        app.quit()
+        wb_formula.close()
+        wb_values.close()
 
 def main():
     ap = argparse.ArgumentParser()
@@ -541,7 +505,7 @@ def main():
 
     out_path = Path(args.out) if args.out else Path(args.pptx_in) if args.pptx_in else Path("deck.pptx")
 
-    out = build_ppt_xlwings(
+    out = build_ppt_openpyxl(
         xlsx_path=Path(args.xlsx),
         out_path=out_path,
         sheet_name=args.sheet,

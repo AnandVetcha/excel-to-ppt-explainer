@@ -1,18 +1,18 @@
 # excel-to-ppt-explainer
-Excel → PowerPoint generator that builds a summary slide and auto-links each number to a detail slide showing the exact Excel formula and a filtered raw-data snippet (xlwings + python-pptx).
+Excel → PowerPoint generator that builds a summary slide and auto-links each number to a detail slide showing the exact Excel formula and a filtered raw-data snippet (openpyxl + python-pptx).
 
 Generate a PowerPoint from an Excel workbook:
 
 - **Slide 1:** a _Summary Table_ (numbers are **clickable**).
 - **Linked slides:** show the **exact Excel formula** used and a **filtered snippet** of the raw table that the formula referenced.
 
-Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (builds the deck).
+Powered by **openpyxl** (reads stored formulas from Excel) and **python-pptx** (builds the deck).
 
 ---
 
 ## Features
 
-- Reads **live formulas** (incl. dynamic-array spills) directly from Excel via xlwings.
+- Reads **stored formulas** (incl. dynamic-array spills) directly from Excel via openpyxl.
 - Numbers on the summary slide link to per-metric **detail slides**.
 - Each detail slide shows:
   - the original **formula** (as stored in Excel);
@@ -26,8 +26,6 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
 
 ## Requirements
 
-- Windows with **Microsoft Excel** installed (xlwings automates Excel).  
-  > macOS with Excel generally works with xlwings too, but this project has been tested primarily on Windows.
 - Python **3.10+**
 - Install Python deps:
   ```bash
@@ -36,7 +34,7 @@ Powered by **xlwings** (reads real formulas from Excel) and **python-pptx** (bui
 
 `requirements.txt`:
 ```
-xlwings>=0.30
+openpyxl>=3.1
 python-pptx>=0.6.23
 pandas>=2.0
 ```
@@ -46,7 +44,7 @@ pandas>=2.0
 ## Quick start
 
 ```bash
-python auto_generate_ppt_xlwings_final_v2.py ^
+python auto_generate_ppt_openpyxl.py ^
   --xlsx sample_sales_mix.xlsx ^
   --sheet Summary ^
   --summary_start A12 ^
@@ -79,7 +77,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 
 ## How it works (high level)
 
-1. **xlwings** opens the workbook and reads values and formulas (using `.Formula2`/`.Formula`).  
+1. **openpyxl** opens the workbook and reads values and formulas.
 2. The script locates your **Summary Table** based on `--summary_start` and parses each metric cell’s **formula anchor** (searches up/down the column if the cell is a spill result).
 3. Structured references (like `Raw_Data[Revenue (USD)]`) are parsed to discover which **raw columns** are used by the formula.
 4. For each summary cell:
@@ -111,7 +109,7 @@ python auto_generate_ppt_xlwings_final_v2.py ^
 
 ```
 .
-├─ auto_generate_ppt_xlwings_final_v2.py
+├─ auto_generate_ppt_openpyxl.py
 ├─ requirements.txt
 ├─ sample_sales_mix.xlsx        # optional demo workbook
 ├─ README.md
