@@ -121,8 +121,13 @@ def read_all_tables(wb_formula, wb_values, verbose: bool = False):
         ws_values = wb_values[ws_formula.title]
         if not ws_formula.tables:
             continue
-        for name, tbl in ws_formula.tables.items():
-            min_col, min_row, max_col, max_row = range_boundaries(tbl.ref)
+        if hasattr(ws_formula.tables, "items"):
+            table_iter = ws_formula.tables.items()
+        else:
+            table_iter = [(t.name, t) for t in ws_formula.tables]
+        for name, tbl in table_iter:
+            ref = getattr(tbl, "ref", tbl)
+            min_col, min_row, max_col, max_row = range_boundaries(ref)
             headers = [ws_values.cell(row=min_row, column=c).value for c in range(min_col, max_col + 1)]
             data = []
             for r in range(min_row + 1, max_row + 1):
