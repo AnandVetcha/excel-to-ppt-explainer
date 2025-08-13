@@ -80,6 +80,28 @@ def parse_structured_columns(formula, table_name):
             cols.append(name)
     return cols
 
+def expand_structured_columns(formula, table_name, table_formulas):
+    """Return columns referenced by ``formula`` including dependencies.
+
+    ``table_formulas`` maps table names to a dict of column -> formula.  If a
+    column referenced in ``formula`` has its own formula, parse that formula to
+    collect further column dependencies (recursively)."""
+    cols = parse_structured_columns(formula, table_name)
+    seen = set(cols)
+    queue = list(cols)
+    while queue:
+        col = queue.pop(0)
+        inner = table_formulas.get(table_name, {}).get(col)
+        if not inner:
+            continue
+        inner_cols = parse_structured_columns(inner, table_name)
+        for ic in inner_cols:
+            if ic not in seen:
+                seen.add(ic)
+                cols.append(ic)
+                queue.append(ic)
+    return cols
+
 def extract_table_names(formula):
     if not formula:
         return []
@@ -133,17 +155,39 @@ def read_all_listobject_dfs(sht):
         tables[lo.Name] = df
     return tables
 
-def read_all_tables(wb):
-    """Return DataFrames for all Excel Tables across every sheet in ``wb``."""
+def read_all_tables(wb, verbose: bool = False):
+    """Return DataFrames and column formulas for all Excel Tables."""
     tables = {}
+    formulas = {}
     for sht in wb.sheets:
         try:
-            tables.update(read_all_listobject_dfs(sht))
-        except RuntimeError:
+            if sht.api.ListObjects.Count < 1:
+                continue
+        except Exception:
             continue
+        for i in range(1, sht.api.ListObjects.Count + 1):
+            lo = sht.api.ListObjects(i)
+            addr = lo.Range.Address
+            df = sht.range(addr).options(pd.DataFrame, header=1, index=False).value
+            tables[lo.Name] = df
+            col_forms = {}
+            for j in range(1, lo.ListColumns.Count + 1):
+                col = lo.ListColumns(j)
+                col_name = col.Name
+                try:
+                    rng = xw.Range(col.DataBodyRange).cells(1, 1)
+                    f = get_formula_str(rng)
+                except Exception:
+                    f = None
+                if f:
+                    col_forms[col_name] = f
+                    if verbose:
+                        deps = parse_structured_columns(f, lo.Name)
+                        print(f"[table] table={lo.Name}, column={col_name}, formula={f}, extracted_cols={deps}")
+            formulas[lo.Name] = col_forms
     if not tables:
         raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
-    return tables
+    return tables, formulas
 
 def guess_key_col(df_raw, preferred_name):
     import re as _re
@@ -263,7 +307,7 @@ def build_ppt_xlwings(
         sht = wb.sheets[sheet_name] if sheet_name else wb.sheets.active
         wb.app.api.CalculateFull()
 
-        table_dfs = read_all_tables(wb)
+        table_dfs, table_formulas = read_all_tables(wb, verbose=verbose)
         if raw_table_name and raw_table_name in table_dfs:
             default_table_name = raw_table_name
         else:
@@ -357,7 +401,7 @@ def build_ppt_xlwings(
                 formula = info["formula"]
                 tbl_name = info.get("table") or default_table_name
                 df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
-                parsed_cols = parse_structured_columns(formula, tbl_name)
+                parsed_cols = expand_structured_columns(formula, tbl_name, table_formulas)
                 cols_used = [key_header] + parsed_cols
                 cols_used = list(dict.fromkeys(cols_used))
                 cols_used = [c for c in cols_used if c in df_raw.columns]
