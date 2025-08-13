@@ -104,12 +104,27 @@ def extract_filter_key(formula, table_name, sht, row_idx, key_col_idx):
         return (None, None)
     s = formula.replace(" ", "")
     col_letter = get_column_letter(key_col_idx)
-    pat = re.compile(
-        rf"(?:{re.escape(table_name)}\[([^\]]+?)\]=\$?{col_letter}\$?{row_idx}|\$?{col_letter}\$?{row_idx}={re.escape(table_name)}\[([^\]]+?)\])"
+    cell_pat = rf"\$?{col_letter}\$?{row_idx}"
+    # Equality comparison (e.g., Table1[Product]=$A12)
+    pat_eq = re.compile(
+        rf"(?:{re.escape(table_name)}\[([^\]]+?)\]={cell_pat}|{cell_pat}={re.escape(table_name)}\[([^\]]+?)\])"
     )
-    m = pat.search(s)
+    m = pat_eq.search(s)
     if m:
         col = (m.group(1) or m.group(2) or "").replace("'", "")
+        key_value = sht.cell(row=row_idx, column=key_col_idx).value
+        return (col, key_value)
+    # Function-style criteria (e.g., SUMIFS(Table1[Amount],Table1[Product],$A12))
+    pat_func = re.compile(rf"{re.escape(table_name)}\[([^\]]+?)\],{cell_pat}")
+    m = pat_func.search(s)
+    if m:
+        col = m.group(1).replace("'", "")
+        key_value = sht.cell(row=row_idx, column=key_col_idx).value
+        return (col, key_value)
+    pat_func_rev = re.compile(rf"{cell_pat},{re.escape(table_name)}\[([^\]]+?)\]")
+    m = pat_func_rev.search(s)
+    if m:
+        col = m.group(1).replace("'", "")
         key_value = sht.cell(row=row_idx, column=key_col_idx).value
         return (col, key_value)
     return (None, None)
@@ -130,19 +145,24 @@ def read_all_tables(wb_formula, wb_values, verbose: bool = False):
             min_col, min_row, max_col, max_row = range_boundaries(ref)
             headers = [ws_values.cell(row=min_row, column=c).value for c in range(min_col, max_col + 1)]
             data = []
+            formula_rows = []
             for r in range(min_row + 1, max_row + 1):
-                data.append([ws_values.cell(row=r, column=c).value for c in range(min_col, max_col + 1)])
+                row_vals = []
+                row_fml = []
+                for c in range(min_col, max_col + 1):
+                    row_vals.append(ws_values.cell(row=r, column=c).value)
+                    row_fml.append(get_formula_str(ws_formula.cell(row=r, column=c)))
+                data.append(row_vals)
+                formula_rows.append(row_fml)
             df = pd.DataFrame(data, columns=headers)
+            df_fml = pd.DataFrame(formula_rows, columns=headers)
             tables[name] = df
-            col_map = {}
-            for j, h in enumerate(headers):
-                cell = ws_formula.cell(row=min_row + 1, column=min_col + j)
-                formula = get_formula_str(cell)
-                col_map[h] = formula
-                if verbose:
+            table_formulas[name] = df_fml
+            if verbose:
+                for j, h in enumerate(headers):
+                    formula = df_fml.iloc[0, j]
                     parsed = parse_structured_columns(formula, name) if formula else []
                     print(f"[table] {name} column={h} formula={formula} parsed={parsed}")
-            table_formulas[name] = col_map
     if not tables:
         raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
     return tables, table_formulas
