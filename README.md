@@ -116,6 +116,10 @@ python auto_generate_ppt_openpyxl.py ^
 └─ LICENSE
 ```
 
+## Continuous integration
+
+A GitHub Actions workflow installs dependencies and runs `verify_pptx.py` to ensure the generated deck has 21 slides and starts with a Summary Table slide.
+
 ---
 
 ## License
