@@ -145,17 +145,36 @@ def read_all_listobject_dfs(sht):
         tables[lo.Name] = df
     return tables
 
-def read_all_tables(wb):
-    """Return DataFrames for all Excel Tables across every sheet in ``wb``."""
+def read_all_tables(wb, verbose: bool = False):
+    """Return DataFrames and column formulas for all Excel Tables in ``wb``."""
     tables = {}
+    table_formulas = {}
     for sht in wb.sheets:
         try:
             tables.update(read_all_listobject_dfs(sht))
         except RuntimeError:
             continue
+        for i in range(1, sht.api.ListObjects.Count + 1):
+            lo = sht.api.ListObjects(i)
+            col_map = {}
+            for j in range(1, lo.ListColumns.Count + 1):
+                col = lo.ListColumns(j)
+                name = col.Name
+                data_body = col.DataBodyRange
+                if data_body is None:
+                    formula = None
+                else:
+                    first_cell = data_body.Cells(1, 1)
+                    cell_rng = sht.range((first_cell.Row, first_cell.Column))
+                    formula = get_formula_str(cell_rng)
+                col_map[name] = formula
+                if verbose:
+                    parsed = parse_structured_columns(formula, lo.Name) if formula else []
+                    print(f"[table] {lo.Name} column={name} formula={formula} parsed={parsed}")
+            table_formulas[lo.Name] = col_map
     if not tables:
         raise RuntimeError("No Excel Table (ListObject) found in this workbook.")
-    return tables
+    return tables, table_formulas
 
 def guess_key_col(df_raw, preferred_name):
     import re as _re
@@ -275,7 +294,7 @@ def build_ppt_xlwings(
         sht = wb.sheets[sheet_name] if sheet_name else wb.sheets.active
         wb.app.api.CalculateFull()
 
-        table_dfs = read_all_tables(wb)
+        table_dfs, table_formulas = read_all_tables(wb, verbose=verbose)
         if raw_table_name and raw_table_name in table_dfs:
             default_table_name = raw_table_name
         else:
