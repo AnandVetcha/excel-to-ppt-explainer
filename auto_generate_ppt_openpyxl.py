@@ -33,11 +33,15 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 # ---------------- Excel helpers ----------------
 def get_formula_str(cell):
     val = cell.value
-    # openpyxl marks formulas with data_type "f", but depending on version
-    # the value may or may not include the leading '='. Normalize here so
-    # callers consistently receive formulas prefixed with '='.
+    # openpyxl marks formulas with data_type "f" but the stored value may be
+    # a plain string or a Formula object (e.g. ArrayFormula) whose textual
+    # representation lives on the ``text`` attribute.  Normalize to a string
+    # that always begins with '=' so downstream consumers can rely on it.
     if getattr(cell, "data_type", None) == "f":
-        text = "" if val is None else str(val)
+        if hasattr(val, "text"):
+            text = val.text or ""
+        else:
+            text = "" if val is None else str(val)
         return text if text.startswith("=") else f"={text}"
     if isinstance(val, str) and val.startswith("="):
         return val
