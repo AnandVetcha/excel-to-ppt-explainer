@@ -72,7 +72,12 @@ def parse_structured_columns(formula, table_name):
         return []
     s = formula.replace("'", "")
     # handle explicit table references, row-specific references, and @ column references
-    pattern = rf"(?:{re.escape(table_name)}\[@\[([^\]]+)\]\]|{re.escape(table_name)}\[([^\]]+)\]|@\[([^\]]+)\])"
+    pattern = (
+        rf"{re.escape(table_name)}\[@\[([^\]]+)\]\]"  # Table[@[Column]]
+        rf"|{re.escape(table_name)}\[([^\]]+)\]"       # Table[Column]
+        rf"|\[@\[([^\]]+)\]\]"                        # [@[Column]] (same table)
+        rf"|@\[([^\]]+)\]"                              # @[Column]
+    )
     cols = []
     for groups in re.findall(pattern, s):
         name = next((g for g in groups if g), None)
