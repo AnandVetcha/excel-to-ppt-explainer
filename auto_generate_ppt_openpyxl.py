@@ -283,6 +283,7 @@ def build_ppt_openpyxl(
     round_digits: int = 2,
     pptx_in_path: Path = None,
     skip_col_idxs: list[int] | None = None,
+    slide_layout_idx: int = 5,
 ):
     wb_formula = load_workbook(xlsx_path, data_only=False)
     wb_values = load_workbook(xlsx_path, data_only=True)
@@ -336,7 +337,7 @@ def build_ppt_openpyxl(
         prs = Presentation(pptx_in_path) if pptx_in_path else Presentation()
         skip_set = set(skip_col_idxs or [])
         # Title Only layout
-        summary_slide = prs.slides.add_slide(prs.slide_layouts[5])
+        summary_slide = prs.slides.add_slide(prs.slide_layouts[slide_layout_idx])
         summary_slide.shapes.title.text = "Summary Table"
 
         # table scaffold aligned with title margins
@@ -413,7 +414,7 @@ def build_ppt_openpyxl(
                     df_filtered = df_raw[df_raw[key_col] == key_val]
                 df_snippet = df_filtered[cols_used].copy()
 
-                slide = prs.slides.add_slide(prs.slide_layouts[5])
+                slide = prs.slides.add_slide(prs.slide_layouts[slide_layout_idx])
                 slide.shapes.title.text = f"{key} – {metric}"
                 title_shape = slide.shapes.title
                 right_margin = prs.slide_width - (title_shape.left + title_shape.width)
@@ -532,6 +533,7 @@ def main():
     ap.add_argument("--table_font_pt", type=int, default=None, help="Font size for table text")
     ap.add_argument("--header_font_pt", type=int, default=None, help=argparse.SUPPRESS)
     ap.add_argument("--round_digits", type=int, default=2, help="Decimal places for numeric values")
+    ap.add_argument("--slide_layout_idx", type=int, default=5, help="Slide layout index for generated slides (default 5)")
     ap.add_argument("--verbose", action="store_true", help="Debug prints")
     ap.add_argument(
         "--skip_cols",
@@ -560,6 +562,7 @@ def main():
         round_digits=args.round_digits,
         pptx_in_path=Path(args.pptx_in) if args.pptx_in else None,
         skip_col_idxs=args.skip_cols,
+        slide_layout_idx=args.slide_layout_idx,
     )
     print(f"PPT created: {out}")
 
