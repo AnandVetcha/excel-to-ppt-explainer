@@ -54,6 +54,7 @@ python auto_generate_ppt_openpyxl.py ^
   --link_mode overlay ^
   --table_font_pt 12 ^
   --round_digits 2 ^
+  --slide_layout_idx 5 ^
   --skip_cols 2 4 ^
   --verbose
 ```
@@ -70,8 +71,15 @@ python auto_generate_ppt_openpyxl.py ^
 - `--link_mode` : `text` (hyperlink on the number text; no shapes; **default**) or `overlay` (transparent rectangles on top of each numeric cell).
 - `--table_font_pt` : font size for table text (deprecated alias: `--header_font_pt`). When `--link_mode` is `text`, row heights scale with this value (0.4" at 18pt).
 - `--round_digits` : decimal places for numeric values (default 2).
+- `--slide_layout_idx` : index of the PowerPoint slide layout to use for generated slides (default 5).
 - `--skip_cols` : one-based indexes of data columns (excluding the key column) to skip linking.
 - `--verbose` : print debug info (useful while wiring up a new workbook).
+
+## Summary formula guidelines
+
+- Nested `SUM` and `FILTER` formulas are supported, e.g., `=SUM(FILTER(Raw_Data[Variants]*Raw_Data[Revenue per variant (USD)],Raw_Data[Category]=A12))`.
+- Summary formulas must pull from data structured as an Excel Table (ListObject).
+- Summary tables using `VLOOKUP` are untested and may not work.
 
 ---
 
