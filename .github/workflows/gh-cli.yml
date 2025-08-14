@@ -27,3 +27,9 @@ jobs:
           pip install -r requirements.txt
       - name: Generate and verify PPTX
         run: python verify_pptx.py
+      - name: Upload generated PPTX as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-pptx
+          path: deck.pptx
+          retention-days: 7
