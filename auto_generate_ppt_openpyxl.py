@@ -74,28 +74,23 @@ def detect_summary_region_from_start(ws, start_addr, max_cols=60, verbose=False)
     return hdr_row, headers, data_rows, start_col
 
 def parse_structured_columns(formula, table_name):
+    """Return a list of column names referenced via structured references.
+
+    Handles patterns such as ``Table1[Column]``, ``Table1[[#This Row],[Column]]``,
+    and same-table references ``[@Column]`` or ``[@[Column]]``.
+    """
+
     if not formula:
         return []
-    cols, target, s, i = [], f"{table_name}[", formula, 0
-    while True:
-        start = s.find(target, i)
-        if start == -1:
-            break
-        j = start + len(target)
-        buf = []
-        while j < len(s):
-            ch = s[j]
-            if ch == ']':
-                if j + 1 < len(s) and s[j+1] == ']':
-                    buf.append(']'); j += 2; continue
-                else:
-                    j += 1; break
-            else:
-                buf.append(ch); j += 1
-        name = ''.join(buf).replace("'", "")
-        if name not in cols:
-            cols.append(name)
-        i = j
+
+    tokens = re.findall(r"\[([^\]]+)\]", formula.replace("'", ""))
+    cols: list[str] = []
+    for tok in tokens:
+        tok = tok.lstrip("[")
+        if tok.startswith("#"):
+            continue
+        if tok not in cols:
+            cols.append(tok)
     return cols
 
 def extract_table_names(formula):
@@ -391,8 +386,20 @@ def build_ppt_openpyxl(
                 tbl_name = info.get("table") or default_table_name
                 df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
                 cols_used = [key_header] + parse_structured_columns(formula, tbl_name)
-                cols_used = list(dict.fromkeys(cols_used))
-                cols_used = [c for c in cols_used if c in df_raw.columns]
+                # Include columns referenced by formulas of previously found columns
+                seen = list(dict.fromkeys(cols_used))
+                idx = 1  # skip key header
+                while idx < len(seen):
+                    col = seen[idx]
+                    tf_df = table_formulas.get(tbl_name)
+                    if tf_df is not None and col in tf_df.columns:
+                        col_formula = next((f for f in tf_df[col] if f), None)
+                        refs = parse_structured_columns(col_formula, tbl_name)
+                        for r in refs:
+                            if r not in seen:
+                                seen.append(r)
+                    idx += 1
+                cols_used = [c for c in seen if c in df_raw.columns]
                 if not cols_used:
                     cols_used = [key_header] if key_header in df_raw.columns else list(df_raw.columns)
                 colname, key_from_formula = extract_filter_key(formula, tbl_name, ws_values, row["row"], key_col_idx=start_col_idx)
