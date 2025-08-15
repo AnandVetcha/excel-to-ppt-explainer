@@ -25,6 +25,7 @@ from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter, range_bo
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.dml.color import RGBColor
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.oxml.ns import qn
@@ -265,7 +266,10 @@ def format_number(val, round_digits: int) -> str:
     if val is None:
         return ""
     if isinstance(val, (int, float)) and not isinstance(val, bool):
-        fmt = f"{{:.{round_digits}f}}"
+        if val == 0:
+            fmt = "{:.0f}"
+        else:
+            fmt = f"{{:.{round_digits}f}}"
         return fmt.format(val)
     return str(val)
 
@@ -284,6 +288,7 @@ def build_ppt_openpyxl(
     pptx_in_path: Path = None,
     skip_col_idxs: list[int] | None = None,
     slide_layout_idx: int = 5,
+    allow_zero: bool = False,
 ):
     wb_formula = load_workbook(xlsx_path, data_only=False)
     wb_values = load_workbook(xlsx_path, data_only=True)
@@ -383,6 +388,9 @@ def build_ppt_openpyxl(
                 if j in skip_set:
                     continue
                 info = row["cells"][metric]
+                val = info["value"]
+                if not allow_zero and isinstance(val, (int, float)) and not isinstance(val, bool) and val == 0:
+                    continue
                 formula = info["formula"]
                 tbl_name = info.get("table") or default_table_name
                 df_raw = table_dfs.get(tbl_name, table_dfs[default_table_name])
@@ -439,7 +447,8 @@ def build_ppt_openpyxl(
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
                 p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
-                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)
+                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1; p3.font.size = Pt(14)
+                tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
                 # Snippet
                 rows, cols = df_snippet.shape
                 if link_mode == "text":
@@ -542,6 +551,11 @@ def main():
         default=[],
         help="1-based indices of data columns (excluding the key column) to skip linking",
     )
+    ap.add_argument(
+        "--allow_zero",
+        action="store_true",
+        help="Create linked slides for summary cells with a value of zero",
+    )
     args = ap.parse_args()
     font_pt = args.table_font_pt if args.table_font_pt is not None else args.header_font_pt
     if font_pt is None:
@@ -563,6 +577,7 @@ def main():
         pptx_in_path=Path(args.pptx_in) if args.pptx_in else None,
         skip_col_idxs=args.skip_cols,
         slide_layout_idx=args.slide_layout_idx,
+        allow_zero=args.allow_zero,
     )
     print(f"PPT created: {out}")
 

@@ -17,6 +17,8 @@ def generate_pptx():
         '--round_digits', '2',
         '--skip_cols', '2', '4'
     ]
+    # include slides for zero values to maintain expected count
+    cmd.append('--allow_zero')
     subprocess.run(cmd, check=True)
 
 def verify_pptx():
