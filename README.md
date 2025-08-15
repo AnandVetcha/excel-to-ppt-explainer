@@ -20,6 +20,7 @@ Powered by **openpyxl** (reads stored formulas from Excel) and **python-pptx** (
 - Hyperlinks can be created as **overlay shapes** on top of each cell (default) or as **text-run** hyperlinks.
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
 - Numeric values are rounded to `--round_digits` decimal places (default 2).
+- `0` values are shown without decimal places and do not create linked slides unless `--allow_zero` is used.
 - Can optionally append all generated slides to an **existing** PowerPoint file; when the template uses a wider slide size, navigation buttons and tables align with the title placeholders.
 
 ---
@@ -73,6 +74,7 @@ python auto_generate_ppt_openpyxl.py ^
 - `--round_digits` : decimal places for numeric values (default 2).
 - `--slide_layout_idx` : index of the PowerPoint slide layout to use for generated slides (default 5).
 - `--skip_cols` : one-based indexes of data columns (excluding the key column) to skip linking.
+- `--allow_zero` : include linked slides for summary cells where the value is exactly zero.
 - `--verbose` : print debug info (useful while wiring up a new workbook).
 
 ## Summary formula guidelines
