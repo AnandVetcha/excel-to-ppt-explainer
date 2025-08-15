@@ -446,8 +446,8 @@ def build_ppt_openpyxl(
                 tf = tx.text_frame; tf.clear()
                 tf.word_wrap = True
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
-                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1
-                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1
+                p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
+                p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1; p3.font.size = Pt(14)
                 tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
                 # Snippet
                 rows, cols = df_snippet.shape
