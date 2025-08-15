@@ -25,6 +25,7 @@ from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter, range_bo
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_AUTO_SIZE
 from pptx.dml.color import RGBColor
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.oxml.ns import qn
@@ -444,6 +445,7 @@ def build_ppt_openpyxl(
                 tx = slide.shapes.add_textbox(content_left, formula_top, content_width, formula_height)
                 tf = tx.text_frame; tf.clear()
                 tf.word_wrap = True
+                tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
                 p1 = tf.paragraphs[0]; p1.text = "Formula:"; p1.font.bold = True
                 p2 = tf.add_paragraph(); p2.text = formula if formula else "(no formula found)"; p2.level = 1; p2.font.size = Pt(14)
                 p3 = tf.add_paragraph(); p3.text = f"Evaluated value: {format_number(info['value'], round_digits)}"; p3.level = 1;p3.font.size = Pt(14)

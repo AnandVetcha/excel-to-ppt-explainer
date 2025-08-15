@@ -21,6 +21,7 @@ Powered by **openpyxl** (reads stored formulas from Excel) and **python-pptx** (
 - Overlay positioning uses the table’s **actual** widths/heights after text is placed; overlays are forced 100% transparent.
 - Numeric values are rounded to `--round_digits` decimal places (default 2).
 - `0` values are shown without decimal places and do not create linked slides unless `--allow_zero` is used.
+- Formula text boxes auto-shrink text to stay within their boundaries.
 - Can optionally append all generated slides to an **existing** PowerPoint file; when the template uses a wider slide size, navigation buttons and tables align with the title placeholders.
 
 ---
